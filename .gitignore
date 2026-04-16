@@ -13,7 +13,6 @@ __pycache__/
 .venv/
 venv/
 env/
-# NOTE: We DO NOT ignore .pkl files because Render needs the trained loan_model.pkl!
 
 # Environment variables (SECURITY)
 .env
