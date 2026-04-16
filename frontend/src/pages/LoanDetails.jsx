@@ -19,7 +19,7 @@ import {
 import { Link } from "wouter";
 import { Building } from "lucide-react";
 
-const PIE_COLORS = ["#16a34a", "#d97706", "#dc2626"];
+const PIE_COLORS = ["#dc2626", "#d97706", "#16a34a"];
 
 function riskCss(riskLevel) {
   if (riskLevel === "HIGH") return "high";
