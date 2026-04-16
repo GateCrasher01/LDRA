@@ -1,0 +1,29 @@
+# Node dependencies
+node_modules/
+npm-debug.log
+
+# Frontend Build output
+frontend/dist/
+frontend/dist-ssr/
+
+# Python / ML
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+# NOTE: We DO NOT ignore .pkl files because Render needs the trained loan_model.pkl!
+
+# Environment variables (SECURITY)
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
