@@ -25,6 +25,14 @@ const loanApplicationSchema = new mongoose.Schema({
     default: "pending",
   },
   createdAt: { type: Date, default: Date.now },
-});
+}, { versionKey: false });
+
+// Indexes for fast analytics queries on large datasets
+loanApplicationSchema.index({ riskLevel: 1 });
+loanApplicationSchema.index({ status: 1 });
+loanApplicationSchema.index({ createdAt: -1 });
+loanApplicationSchema.index({ income: 1 });
+loanApplicationSchema.index({ probability: 1 });
+loanApplicationSchema.index({ name: "text" }); // supports search
 
 export default mongoose.model("LoanApplication", loanApplicationSchema);

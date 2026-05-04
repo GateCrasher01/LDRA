@@ -31,13 +31,13 @@ def predict():
   if not payload:
     return jsonify({ "error": "Invalid or missing JSON body" }), 400
 
-  # Required inputs per specification
+  
   required = ["credit_score", "income", "age", "loan_amount", "loan_term"]
   missing = [k for k in required if k not in payload]
   if missing:
     return jsonify({ "error": f"Missing fields: {', '.join(missing)}" }), 400
 
-  # Optional input (your backend currently sends this; training includes it)
+  
   employment_status = payload.get("employment_status", "employed")
 
   try:
@@ -62,6 +62,6 @@ def predict():
 
 if __name__ == "__main__":
   port = int(os.environ.get("PORT", "5001"))
-  # NOTE: For production, run behind a proper WSGI server (gunicorn/uwsgi) and enable HTTPS.
+
   app.run(host="0.0.0.0", port=port)
 

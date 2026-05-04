@@ -6,63 +6,105 @@ const router = Router();
 
 router.get("/summary", requireAuth, async (_req, res) => {
   try {
-    const allLoans = await LoanApplication.find();
-    const totalLoans = allLoans.length;
-    const highRisk = allLoans.filter((l) => l.riskLevel === "HIGH").length;
-    const mediumRisk = allLoans.filter((l) => l.riskLevel === "MEDIUM").length;
-    const lowRisk = allLoans.filter((l) => l.riskLevel === "LOW").length;
-    const totalLoanValue = allLoans.reduce((s, l) => s + (l.loanAmount || 0), 0);
-    const avgCreditScore = totalLoans > 0
-      ? allLoans.reduce((s, l) => s + (l.creditScore || 0), 0) / totalLoans : 0;
-    const approved = allLoans.filter((l) => l.status === "approved").length;
-    const approvalRate = totalLoans > 0 ? (approved / totalLoans) * 100 : 0;
+    const [result] = await LoanApplication.aggregate([
+      {
+        $facet: {
+          total:       [{ $count: "count" }],
+          byRisk:      [{ $group: { _id: "$riskLevel", count: { $sum: 1 } } }],
+          loanValue:   [{ $group: { _id: null, total: { $sum: "$loanAmount" }, avgCredit: { $avg: "$creditScore" } } }],
+          approved:    [{ $match: { status: "approved" } }, { $count: "count" }],
+        },
+      },
+    ]);
 
-    res.json({ totalLoans, highRisk, mediumRisk, lowRisk, totalLoanValue, avgCreditScore, approvalRate });
+    const totalLoans   = result.total[0]?.count ?? 0;
+    const loanValue    = result.loanValue[0] ?? {};
+    const approvedCount = result.approved[0]?.count ?? 0;
+    const riskMap      = Object.fromEntries(result.byRisk.map((r) => [r._id, r.count]));
+
+    res.json({
+      totalLoans,
+      highRisk:       riskMap["HIGH"]   ?? 0,
+      mediumRisk:     riskMap["MEDIUM"] ?? 0,
+      lowRisk:        riskMap["LOW"]    ?? 0,
+      totalLoanValue: loanValue.total   ?? 0,
+      avgCreditScore: loanValue.avgCredit ?? 0,
+      approvalRate:   totalLoans > 0 ? (approvedCount / totalLoans) * 100 : 0,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+
 router.get("/charts", requireAuth, async (_req, res) => {
   try {
-    const allLoans = await LoanApplication.find();
+    const now = new Date();
+
+    // Risk distribution — single aggregation
+    const riskAgg = await LoanApplication.aggregate([
+      { $group: { _id: "$riskLevel", value: { $sum: 1 } } },
+    ]);
+    const riskMap = Object.fromEntries(riskAgg.map((r) => [r._id, r.value]));
     const riskDistribution = [
-      { label: "High Risk", value: allLoans.filter((l) => l.riskLevel === "HIGH").length },
-      { label: "Medium Risk", value: allLoans.filter((l) => l.riskLevel === "MEDIUM").length },
-      { label: "Low Risk", value: allLoans.filter((l) => l.riskLevel === "LOW").length },
+      { label: "High Risk",   value: riskMap["HIGH"]   ?? 0 },
+      { label: "Medium Risk", value: riskMap["MEDIUM"] ?? 0 },
+      { label: "Low Risk",    value: riskMap["LOW"]    ?? 0 },
     ];
 
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-    const approvalTrend = months.map((month, idx) => {
-      const monthLoans = allLoans.filter((l) => {
-        const d = new Date(l.createdAt);
-        return d.getMonth() === (new Date().getMonth() - (5 - idx) + 12) % 12;
+    // Approval trend — last 6 months via aggregation
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const trendAgg = await LoanApplication.aggregate([
+      { $match: { createdAt: { $gte: sixMonthsAgo } } },
+      {
+        $group: {
+          _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" }, riskLevel: "$riskLevel" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const approvalTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - i);
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+      const rows = trendAgg.filter((r) => r._id.month === m && r._id.year === y);
+      const byRisk = Object.fromEntries(rows.map((r) => [r._id.riskLevel, r.count]));
+      approvalTrend.push({
+        month:  monthNames[m - 1],
+        high:   byRisk["HIGH"]   ?? 0,
+        medium: byRisk["MEDIUM"] ?? 0,
+        low:    byRisk["LOW"]    ?? 0,
       });
-      return {
-        month,
-        high: monthLoans.filter((l) => l.riskLevel === "HIGH").length,
-        medium: monthLoans.filter((l) => l.riskLevel === "MEDIUM").length,
-        low: monthLoans.filter((l) => l.riskLevel === "LOW").length,
-        total: monthLoans.length,
-      };
-    });
+    }
 
-    const incomeRanges = [
-      { label: "< ₹3L", min: 0, max: 300000 },
-      { label: "₹3L-₹6L", min: 300000, max: 600000 },
-      { label: "₹6L-₹10L", min: 600000, max: 1000000 },
-      { label: "₹10L-₹15L", min: 1000000, max: 1500000 },
-      { label: "> ₹15L", min: 1500000, max: Infinity },
-    ];
-    const incomeVsDefaultRisk = incomeRanges.map((range) => {
-      const group = allLoans.filter((l) => l.income >= range.min && l.income < range.max);
-      const defaultCount = group.filter((l) => l.prediction === 1).length;
-      return {
-        incomeRange: range.label,
-        defaultRate: group.length > 0 ? (defaultCount / group.length) * 100 : 0,
-        count: group.length,
-      };
-    });
+    // Income vs default rate — $bucket aggregation
+    const incomeAgg = await LoanApplication.aggregate([
+      {
+        $bucket: {
+          groupBy: "$income",
+          boundaries: [0, 300000, 600000, 1000000, 1500000, Infinity],
+          default: "> ₹15L",
+          output: {
+            total:        { $sum: 1 },
+            defaultCount: { $sum: { $cond: [{ $eq: ["$prediction", 1] }, 1, 0] } },
+          },
+        },
+      },
+    ]);
+    const rangeLabels = ["< ₹3L", "₹3L-₹6L", "₹6L-₹10L", "₹10L-₹15L", "> ₹15L"];
+    const incomeVsDefaultRisk = incomeAgg.map((b, i) => ({
+      incomeRange: rangeLabels[i] ?? String(b._id),
+      defaultRate: b.total > 0 ? (b.defaultCount / b.total) * 100 : 0,
+      count:       b.total,
+    }));
 
     res.json({ riskDistribution, approvalTrend, incomeVsDefaultRisk });
   } catch (err) {
@@ -70,40 +112,48 @@ router.get("/charts", requireAuth, async (_req, res) => {
   }
 });
 
+
 router.get("/loan/:id", requireAuth, async (req, res) => {
   try {
-    const allLoans = await LoanApplication.find();
     const loan = await LoanApplication.findById(req.params.id);
     if (!loan) return res.status(404).json({ error: "Loan not found" });
 
     const featureImportance = [
-      { feature: "Credit Score", importance: 0.32 },
-      { feature: "Income", importance: 0.24 },
-      { feature: "Loan Amount", importance: 0.18 },
-      { feature: "Debt-to-Income", importance: 0.14 },
+      { feature: "Credit Score",      importance: 0.32 },
+      { feature: "Income",            importance: 0.24 },
+      { feature: "Loan Amount",       importance: 0.18 },
+      { feature: "Debt-to-Income",    importance: 0.14 },
       { feature: "Employment Status", importance: 0.08 },
-      { feature: "Age", importance: 0.04 },
+      { feature: "Age",               importance: 0.04 },
     ];
 
-    const creditScoreVsRisk = allLoans
-      .filter((l) => l.probability != null)
-      .slice(0, 50)
-      .map((l) => ({
-        creditScore: l.creditScore,
-        probability: l.probability,
-        riskLevel: l.riskLevel || "LOW",
-      }));
+    // Fetch only 50 records with projection — no full collection scan
+    const sample = await LoanApplication
+      .find({ probability: { $ne: null } }, { creditScore: 1, probability: 1, riskLevel: 1, loanAmount: 1 })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
 
-    const loanAmountVsRisk = allLoans
-      .filter((l) => l.probability != null)
+    const creditScoreVsRisk = sample.map((l) => ({
+      creditScore: l.creditScore,
+      probability: l.probability,
+      riskLevel:   l.riskLevel || "LOW",
+    }));
+
+    const loanAmountVsRisk = sample
       .slice(0, 30)
       .map((l) => ({ loanAmount: l.loanAmount, probability: l.probability }))
       .sort((a, b) => a.loanAmount - b.loanAmount);
 
+    // Risk distribution via aggregation
+    const riskAgg = await LoanApplication.aggregate([
+      { $group: { _id: "$riskLevel", value: { $sum: 1 } } },
+    ]);
+    const riskMap = Object.fromEntries(riskAgg.map((r) => [r._id, r.value]));
     const riskDistribution = [
-      { label: "High Risk", value: allLoans.filter((l) => l.riskLevel === "HIGH").length },
-      { label: "Medium Risk", value: allLoans.filter((l) => l.riskLevel === "MEDIUM").length },
-      { label: "Low Risk", value: allLoans.filter((l) => l.riskLevel === "LOW").length },
+      { label: "High Risk",   value: riskMap["HIGH"]   ?? 0 },
+      { label: "Medium Risk", value: riskMap["MEDIUM"] ?? 0 },
+      { label: "Low Risk",    value: riskMap["LOW"]    ?? 0 },
     ];
 
     res.json({ featureImportance, creditScoreVsRisk, loanAmountVsRisk, riskDistribution });
@@ -111,5 +161,6 @@ router.get("/loan/:id", requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 export default router;
