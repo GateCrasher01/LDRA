@@ -90,7 +90,7 @@ router.get("/charts", requireAuth, async (_req, res) => {
       {
         $bucket: {
           groupBy: "$income",
-          boundaries: [0, 300000, 600000, 1000000, 1500000, Infinity],
+          boundaries: [0, 300000, 600000, 1000000, 1500000],
           default: "> ₹15L",
           output: {
             total:        { $sum: 1 },
