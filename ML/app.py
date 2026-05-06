@@ -4,7 +4,6 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 
-
 def load_model() -> object:
   root = os.path.dirname(__file__)
   model_path = os.environ.get("MODEL_PATH", os.path.join(root, "loan_model.pkl"))
@@ -14,16 +13,13 @@ def load_model() -> object:
     )
   return joblib.load(model_path)
 
-
 app = Flask(__name__)
 CORS(app)
 MODEL = load_model()
 
-
 @app.get("/health")
 def health():
   return jsonify({ "status": "ok" })
-
 
 @app.post("/predict")
 def predict():
@@ -31,13 +27,11 @@ def predict():
   if not payload:
     return jsonify({ "error": "Invalid or missing JSON body" }), 400
 
-  
   required = ["credit_score", "income", "age", "loan_amount", "loan_term"]
   missing = [k for k in required if k not in payload]
   if missing:
     return jsonify({ "error": f"Missing fields: {', '.join(missing)}" }), 400
 
-  
   employment_status = payload.get("employment_status", "employed")
 
   try:
@@ -58,7 +52,6 @@ def predict():
   proba = float(MODEL.predict_proba(X)[0][1])
 
   return jsonify({ "prediction": pred, "probability": proba })
-
 
 if __name__ == "__main__":
   port = int(os.environ.get("PORT", "5001"))

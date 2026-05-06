@@ -12,12 +12,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 
-
 def get_mongodb_loan_dataset() -> tuple[pd.DataFrame, np.ndarray]:
-    """
-    Connects to the backend's MongoDB Atlas cluster and retrieves real loan data.
-    """
-    
+
     backend_env_path = os.path.join(os.path.dirname(__file__), "..", "backend", ".env")
     load_dotenv(dotenv_path=backend_env_path)
 
@@ -31,11 +27,9 @@ def get_mongodb_loan_dataset() -> tuple[pd.DataFrame, np.ndarray]:
         db = client.get_default_database()
     except Exception:
         db = client["lendingRiskDB"]
-    
-    
+
     collection = db["loanapplications"]
 
-   
     cursor = collection.find({"status": {"$in": ["approved", "rejected"]}})
     records = list(cursor)
 
@@ -48,7 +42,7 @@ def get_mongodb_loan_dataset() -> tuple[pd.DataFrame, np.ndarray]:
 
     for rec in records:
         try:
-        
+
             row = {
                 "credit_score": float(rec.get("creditScore", 0)),
                 "income": float(rec.get("income", 0)),
@@ -58,8 +52,7 @@ def get_mongodb_loan_dataset() -> tuple[pd.DataFrame, np.ndarray]:
                 "employment_status": str(rec.get("employmentStatus", "employed")),
             }
             data_rows.append(row)
-            
-            
+
             label = 1 if rec.get("status") == "rejected" else 0
             labels.append(label)
         except (TypeError, ValueError):
@@ -70,7 +63,6 @@ def get_mongodb_loan_dataset() -> tuple[pd.DataFrame, np.ndarray]:
 
     return X, y
 
-
 def train_and_save(model_path: str) -> None:
     X, y = get_mongodb_loan_dataset()
 
@@ -78,13 +70,11 @@ def train_and_save(model_path: str) -> None:
         print(f"Warning: Only {len(X)} records found. Skipping training to avoid destroying the existing model. Database lacks minimum data requirements (10+ records needed).")
         return
 
-    
     unique_classes = np.unique(y)
     if len(unique_classes) < 2:
         print("Warning: All retrieved records have the EXACT same status (either all approved, or all rejected). Random forest requires mixed sets to derive insights. Skipping training until variance occurs.")
         return
 
-   
     try:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=52, stratify=y)
     except ValueError:
@@ -118,7 +108,6 @@ def train_and_save(model_path: str) -> None:
         random_state=42,
     )
 
-    # Calibrate probabilities using isotonic regression for lower MAPE
     calibrated_clf = CalibratedClassifierCV(clf, method="isotonic", cv=5)
 
     model = Pipeline(steps=[("preprocess", preprocessor), ("clf", calibrated_clf)])
@@ -127,7 +116,6 @@ def train_and_save(model_path: str) -> None:
     test_pred = model.predict(X_test)
     acc = (test_pred == y_test).mean()
 
-    
     y_pred_proba = model.predict_proba(X_test)[:, 1]
     non_zero_mask = y_test != 0
     if np.any(non_zero_mask):
@@ -143,12 +131,10 @@ def train_and_save(model_path: str) -> None:
     joblib.dump(model, model_path)
     print(f"Saved model to: {model_path}")
 
-
 def main() -> None:
     root = os.path.dirname(__file__)
     model_path = os.environ.get("MODEL_PATH", os.path.join(root, "loan_model.pkl"))
     train_and_save(model_path)
-
 
 if __name__ == "__main__":
     main()
