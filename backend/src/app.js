@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import authRoutes from "./routes/auth.js";
@@ -15,8 +16,17 @@ app.use(cors({ origin: "*", credentials: false }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Strict Rate Limiting for Brute Force Protection
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login/register requests per window
+  message: { error: "Too many login attempts from this IP, please try again after 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api", loanRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
