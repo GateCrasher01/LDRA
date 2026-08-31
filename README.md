@@ -26,9 +26,8 @@ An intelligent, cloud-native banking and risk-assessment dashboard. LDRA replace
 
 ---
 
-## ☁️ Deployment Strategy 
+## ☁️ Deployment
 
-This repository includes a highly-calibrated `.gitignore` optimized for auto-deployments. 
 1. The **React UI** can be directly connected to **Vercel**.
 2. The **Node Backend** can be deployed as a **Render Web Service** (Command: `npm start`).
 3. The **Flask ML Server** can be deployed as a **Render Web Service** (Build Command: `pip install -r requirements.txt`, Start Command: `gunicorn app:app`).
