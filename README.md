@@ -7,8 +7,7 @@ An intelligent, cloud-native banking and risk-assessment dashboard. LDRA replace
 - **🧠 Predictive Analytics:** Uses a trained `scikit-learn` Random Forest to output a live _Default Probability_ and _Risk Level_ (Low, Medium, High).
 - **📊 Real-time Dashboard:** Built iteratively with `Recharts` providing live macro-metrics on Approval Rates, Debt-to-Income distributions, and aggregate portfolio values modeled for Indian limits.
 - **🔒 Secure Banking Standards:** Requires strict password architecture and protects routes with hardened JSON Web Tokens (JWT).
-- **☁️ Cloud-Native Microservices:** Architected specifically to decouple the heavy Machine Learning pipeline from standard database CRUD operations.
-
+  
 ---
 
 ## 🏗 Architecture & Stack 
